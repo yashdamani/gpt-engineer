@@ -3,7 +3,7 @@ import uuid
 
 from typing import Any, List
 
-from maxim import Logger
+from maxim import Maxim
 from maxim.logger.components import (
     ErrorConfig,
     FeedbackDict,
