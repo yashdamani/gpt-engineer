@@ -27,7 +27,8 @@ def get_logger() -> Logger:
             "id": os.getenv("MAXIM_LOGGER_ID", str(uuid.uuid4()))
         }
         api_key = os.getenv("MAXIM_API_KEY", "")
-        _logger = Logger(config, api_key=api_key)
+        maxim = Maxim({"api_key":api_key})
+        _logger = maxim.logger(config)
     return _logger
 
 
