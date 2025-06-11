@@ -27,8 +27,7 @@ def get_logger() -> Logger:
             "id": os.getenv("MAXIM_LOGGER_ID", str(uuid.uuid4()))
         }
         api_key = os.getenv("MAXIM_API_KEY", "")
-        base_url = os.getenv("MAXIM_BASE_URL", None)
-        _logger = Logger(config, api_key=api_key, base_url=base_url)
+        _logger = Logger(config, api_key=api_key)
     return _logger
 
 
