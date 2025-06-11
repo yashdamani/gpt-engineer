@@ -32,6 +32,7 @@ from gpt_engineer.applications.cli.learning import (
 )
 from gpt_engineer.core.default.disk_memory import DiskMemory
 from gpt_engineer.core.prompt import Prompt
+from gpt_engineer.instrumentation import maxim_logger
 
 
 def send_learning(learning: Learning):
@@ -93,10 +94,19 @@ def collect_learnings(
     This function attempts to send the learning data to RudderStack. If the data size exceeds
     the maximum allowed size, it trims the data and retries sending it.
     """
+    trace = maxim_logger.start_trace("collect_learnings")
+    maxim_logger.log_feedback(
+        trace,
+        {
+            "score": int(bool(review.perfect)) if review.perfect is not None else 0,
+            "comment": review.comments,
+        },
+    )
     learnings = extract_learning(prompt, model, temperature, config, memory, review)
     try:
         send_learning(learnings)
-    except RuntimeError:
+    except RuntimeError as e:
+        maxim_logger.log_error(trace, str(e))
         # try to remove some parts of learning that might be too big
         # rudderstack max event size is 32kb
         max_size = 32 << 10  # 32KB in bytes
@@ -118,10 +128,13 @@ def collect_learnings(
         )
         try:
             send_learning(learnings)
-        except RuntimeError:
+        except RuntimeError as e:
+            maxim_logger.log_error(trace, str(e))
             print(
                 "Sending learnings crashed despite truncation. Progressing without saving learnings."
             )
+    finally:
+        maxim_logger.end_trace(trace)
 
 
 # def steps_file_hash():

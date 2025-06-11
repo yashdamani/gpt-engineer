@@ -39,6 +39,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 from gpt_engineer.core.token_usage import TokenUsageLog
+from gpt_engineer.instrumentation import maxim_logger
 
 # Type hint for a chat message
 Message = Union[AIMessage, HumanMessage, SystemMessage]
@@ -240,7 +241,16 @@ class AI:
         if not self.vision:
             messages = self._collapse_text_messages(messages)
 
-        response = self.backoff_inference(messages)
+        trace = maxim_logger.start_trace(step_name, AI.serialize_messages(messages))
+        try:
+            response = self.backoff_inference(messages)
+            maxim_logger.log_generation(trace, messages, response, self.model_name)
+            trace.set_output(response.content)
+        except Exception as e:
+            maxim_logger.log_error(trace, str(e))
+            raise
+        finally:
+            maxim_logger.end_trace(trace)
 
         self.token_usage_log.update_log(
             messages=messages, answer=response.content, step_name=step_name

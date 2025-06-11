@@ -31,6 +31,7 @@ from typing import Optional, Tuple, Union
 from gpt_engineer.core.base_execution_env import BaseExecutionEnv
 from gpt_engineer.core.default.file_store import FileStore
 from gpt_engineer.core.files_dict import FilesDict
+from gpt_engineer.instrumentation import maxim_logger
 
 
 class DiskExecutionEnv(BaseExecutionEnv):
@@ -60,16 +61,27 @@ class DiskExecutionEnv(BaseExecutionEnv):
         return self.files.pull()
 
     def popen(self, command: str) -> subprocess.Popen:
-        p = subprocess.Popen(
-            command,
-            shell=True,
-            cwd=self.files.working_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        return p
+        trace = maxim_logger.start_trace("popen", command)
+        try:
+            p = subprocess.Popen(
+                command,
+                shell=True,
+                cwd=self.files.working_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            maxim_logger.log_tool_call(
+                trace,
+                "subprocess.popen",
+                {"cwd": str(self.files.working_dir)},
+                {"pid": p.pid},
+            )
+            return p
+        finally:
+            maxim_logger.end_trace(trace)
 
     def run(self, command: str, timeout: Optional[int] = None) -> Tuple[str, str, int]:
+        trace = maxim_logger.start_trace("run_command", command)
         start = time.time()
         print("\n--- Start of run ---")
         # while running, also print the stdout and stderr
@@ -107,5 +119,20 @@ class DiskExecutionEnv(BaseExecutionEnv):
             p.kill()
             print()
             print("--- Finished run ---\n")
+        except Exception as e:
+            maxim_logger.log_error(trace, str(e))
+            raise
+        finally:
+            maxim_logger.log_tool_call(
+                trace,
+                command,
+                {},
+                {
+                    "stdout": stdout_full,
+                    "stderr": stderr_full,
+                    "returncode": p.returncode,
+                },
+            )
+            maxim_logger.end_trace(trace)
 
         return stdout_full, stderr_full, p.returncode
