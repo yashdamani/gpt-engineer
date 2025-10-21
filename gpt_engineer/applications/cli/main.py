@@ -61,6 +61,7 @@ from gpt_engineer.core.files_dict import FilesDict
 from gpt_engineer.core.git import stage_uncommitted_to_git
 from gpt_engineer.core.preprompts_holder import PrepromptsHolder
 from gpt_engineer.core.prompt import Prompt
+from gpt_engineer.instrumentation import maxim_logger
 from gpt_engineer.tools.custom_steps import clarified_gen, lite_gen, self_heal
 
 app = typer.Typer(
@@ -454,6 +455,7 @@ def main(
         ), "Clarify and lite mode are not active for improve mode"
 
     load_env_if_needed()
+    maxim_logger.start_session()
 
     if llm_via_clipboard:
         ai = ClipboardAI()
@@ -555,6 +557,9 @@ def main(
         print("Total api cost: $ 0.0 since we are using local LLM.")
     else:
         print("Total tokens used: ", ai.token_usage_log.total_tokens())
+
+    maxim_logger.end_session()
+    maxim_logger.flush()
 
 
 if __name__ == "__main__":

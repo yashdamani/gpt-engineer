@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Union
 
 from gpt_engineer.core.base_memory import BaseMemory
+from gpt_engineer.instrumentation import maxim_logger
 from gpt_engineer.tools.supported_languages import SUPPORTED_LANGUAGES
 
 
@@ -99,19 +100,27 @@ class DiskMemory(BaseMemory):
         KeyError
             If the file corresponding to the key does not exist in the database.
         """
-        full_path = self.path / key
+        trace = maxim_logger.start_trace("disk_memory_getitem", key)
+        try:
+            full_path = self.path / key
 
-        if not full_path.is_file():
-            raise KeyError(f"File '{key}' could not be found in '{self.path}'")
+            if not full_path.is_file():
+                raise KeyError(f"File '{key}' could not be found in '{self.path}'")
 
-        if full_path.suffix in [".png", ".jpeg", ".jpg"]:
-            with full_path.open("rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-                mime_type = "image/png" if full_path.suffix == ".png" else "image/jpeg"
-                return f"data:{mime_type};base64,{encoded_string}"
-        else:
-            with full_path.open("r", encoding="utf-8") as f:
-                return f.read()
+            if full_path.suffix in [".png", ".jpeg", ".jpg"]:
+                with full_path.open("rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+                    mime_type = (
+                        "image/png" if full_path.suffix == ".png" else "image/jpeg"
+                    )
+                    result = f"data:{mime_type};base64,{encoded_string}"
+            else:
+                with full_path.open("r", encoding="utf-8") as f:
+                    result = f.read()
+            maxim_logger.log_retrieval(trace, "disk_get", key, result)
+            return result
+        finally:
+            maxim_logger.end_trace(trace)
 
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         """
@@ -138,7 +147,10 @@ class DiskMemory(BaseMemory):
                 return DiskMemory(item_path)
             else:
                 return default
-        except:
+        except Exception as e:
+            trace = maxim_logger.start_trace("disk_memory_get_error", key)
+            maxim_logger.log_error(trace, str(e))
+            maxim_logger.end_trace(trace)
             return default
 
     def __setitem__(self, key: Union[str, Path], val: str) -> None:
@@ -170,6 +182,9 @@ class DiskMemory(BaseMemory):
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         full_path.write_text(val, encoding="utf-8")
+        trace = maxim_logger.start_trace("disk_memory_setitem", str(key))
+        maxim_logger.log_attachment(trace, {"path": str(full_path), "name": str(key)})
+        maxim_logger.end_trace(trace)
 
     def __delitem__(self, key: Union[str, Path]) -> None:
         """
